@@ -6,7 +6,7 @@ from pathlib import Path, PurePosixPath
 APP_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_FILE = APP_ROOT / "update_channel.json"
 STATE_DIR = APP_ROOT / ".sailvu_updates"
-DEFAULT_MANIFEST_URL = "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/main/stable.json"
+DEFAULT_MANIFEST_URL = "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/refs/heads/main/stable.json"
 MAX_FILE_BYTES = 25 * 1024 * 1024
 ALLOWED_FILES = {"app.js", "index.html", "style.css", "vessel_logic.js"}
 ALLOWED_DIRS = ("data/", "vendor/", "assets/", "scripts/")
