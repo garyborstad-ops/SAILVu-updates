@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAILVu — Strait of Georgia Current Atlas (Step 1 MVP)</title>
+<!-- 2026-08-07: vendored locally (vendor/leaflet/) instead of loaded from
+     cdnjs -- this was the one undocumented internet dependency in an
+     otherwise offline-first app (Section 1.1): unlike the base map tiles
+     (an intentional, report-sanctioned exception), Leaflet itself is not
+     optional -- nothing on this page renders without it, so a CDN outage
+     or no-signal page load broke everything, not just the background
+     imagery. Files copied verbatim from the official leaflet@1.9.4 npm
+     package (dist/leaflet.css, dist/leaflet.js, dist/images/*), matching
+     the version previously pinned to the CDN URL exactly. -->
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+<link rel="stylesheet" href="style.css?v=20260814-sst-labels" />
+</head>
+<body>
+  <div id="app" class="sidebar-collapsed">
+    <div id="map"></div>
+    <!-- 2026-08-04: swapped the plain "SAILVu" text label for the owner's
+         uploaded icon graphic (assets/sailvu_icon_256.png -- downscaled
+         from the original 1254x1254/1.4MB upload to 256x256/~89KB, plenty
+         for the ~34px display size this renders at, see style.css).
+         aria-label unchanged (screen readers still get real text); alt
+         text on the image itself is redundant with it, so left empty. -->
+    <button id="sidebar-toggle-btn" aria-label="Open or close menu"><img src="assets/sailvu_icon_256.png" alt="" id="sidebar-toggle-icon"></button>
+    <button id="kids-map-menu-btn" aria-label="Open or close KIDS menu"><img src="assets/kids_wheel_icon_small.png" alt="" id="kids-map-menu-icon"><span id="kids-map-menu-label">KIDS</span></button>
+
+    <div id="sidebar">
+      <!-- 2026-08-03, third pass: back to a vertically-stacked accordion
+           (nested <details>/<summary>), per the owner's explicit request --
+           the second pass's horizontal tab bar is gone. Same grouping as
+           the second pass (About; Setup > Data Refresh/Area of Operations;
+           Planning > Layout Route/Query Route; Map > Current Field/Wind
+           Field), just rendered as native, no-JS-needed collapsible
+           sections instead of click-to-switch tabs -- nesting one
+           <details> inside another works natively, each with its own
+           independent open/closed state, no app.js wiring required at all
+           for the accordion itself (unlike the removed switchTab()/
+           switchSubtab()). Every section starts closed (no `open`
+           attribute anywhere below) so opening the sidebar shows just the
+           list of section titles, per the owner's request. The "SAILVu"
+           h1 that used to sit above these sections is gone too -- it's now
+           the sidebar-toggle-btn's permanent label instead (see that
+           button's own styling in style.css), living on the map, and the
+           sidebar itself starts collapsed (class="sidebar-collapsed" on
+           #app above) rather than open. See app.js's (much simpler)
+           toggleSidebar() -- no switchTab()/switchSubtab() exist anymore. -->
+
+      <details class="section-details">
+        <summary>About</summary>
+        <p class="disclaimer">
+          Scope per Section 10.2 of the SAILVu report: map, click-to-plan route,
+          per-leg speed, plotted ETA, gate/pass current warnings, and a current +
+          wind-leeway ETA correction (wind added 2026-08-05 — see the Leeway %
+          field under Layout Route). Current/wind data (SalishSeaCast/CIOPS/HRDPS) is a
+          static pre-downloaded snapshot, not live, and the correction is a
+          nearest-neighbor approximation — see each leg's own note. Vessel position
+          can be set manually, read from this device, or received from Signal K.
+        </p>
+        <p class="disclaimer">
+          <strong>Data refresh:</strong> Cellular Minimum updates EC forecasts and
+          warnings while retaining model files. Voyage Region downloads the box you
+          draw on the map. Shore Wi-Fi downloads the complete model region. A failed
+          large download falls back to EC/tides, then EC only, without deleting the
+          previous model files. At overview zoom 7 the map stays inside the blue Voyage Region box; zoom in farther to pan the complete map freely.
+        </p>
+        <p class="disclaimer">
+          Shift+click anywhere on the map to add a route waypoint. A plain
+          click instead queries the nearest current and wind readings at
+          that point. Gate and tide station markers show their name and
+          latest data on hover, and open a data/graph popup on click. Backspace
+          removes the last route waypoint. Graph windows resize by dragging a
+          corner. Stations are map-only, not listed in the sidebar.
+        </p>
+        <p class="disclaimer">
+          Map arrow colors: blue = ambient current field (Section 8.5), green =
+          your vessel's resultant over-the-ground track per leg (current +
+          wind-leeway, see Leeway % under Layout Route), purple = tide
+          (high/low water level) stations, gold = wind (10m, HRDPS forecast —
+          off by default; enable under Wind/Weather &rarr; Modelled winds). The gold arrows
+          themselves are just a map visualization — the underlying wind data
+          they're drawn from is the same data the leeway calculation reads,
+          whether or not this layer is switched on. Blue, green, and gold
+          arrows all point in
+          the direction that quantity is moving toward. Blue and green
+          arrows share the same length scale (length = distance that speed
+          would cover in one hour) so a 1-knot current and a 1-knot vessel
+          speed always look the same length — compare them against the
+          bottom-left scale-arrow legend. Gold wind arrows use a fixed
+          shaft length instead, regardless of speed (not comparable to the
+          scale-arrow legend); speed is shown by feather-style marks near
+          the tail instead (a triangular pennant = 50kn, a long feather =
+          10kn, a short feather = 5kn, rounded to the nearest 5kn).
+        </p>
+        <p class="disclaimer">
+          Gate station markers and gate warnings also show a
+          SalishSeaCast model sample at that station — a separate data source
+          shown alongside the CHS harmonic prediction, not a formal comparison
+          (Section 6.7 remains closed). Tide predictions are CHS high/low
+          events at four stations around the region — a separate set of
+          stations from the current gates, not corrected for at all in route
+          ETAs. Offline CANVEC and downloaded forecasts work without internet;
+          online base maps and fresh data downloads require a connection.
+        </p>
+        <p class="disclaimer">
+          The floating control at the bottom of the map scrubs current/wind/
+          wave layers and gate/tide/wind station tooltips through whatever
+          snapshots are already on file — drag its slider, use PgUp/PgDn,
+          or press either Auto button for playback. Press Auto again or NOW to
+          stop; PageUp/PageDown/Home work from the keyboard (Home returns to
+          live). It does NOT affect route ETA or ground-track correction,
+          which always use real elapsed time for each leg regardless of what
+          the map is currently showing.
+        </p>
+
+        <!-- Short operator-facing view of app/BACKLOG.md. Keep the two in
+             sync by hand when priorities are added, completed, or reordered. -->
+        <details class="section-details">
+          <summary>Wish list</summary>
+          <ul class="wish-list">
+            <li>Make regional downloads smaller and faster while preserving native resolution</li>
+            <li>Complete future underway verification of Signal K COG, 10-second logging, and advisory gate ETA</li>
+            <li>Add DFO management-area labels; replace the 2019 RCA snapshot when newer authoritative polygons are available</li>
+            <li>Validate gate-current timing and add ebb/flood direction to gate graphs</li>
+            <li>Current-adjusted gate departure guidance</li>
+            <li>Water-masked interpolation for current, wave, and interaction heat maps</li>
+            <li>Additional WaveWatch data: direction, period, and related products</li>
+            <li>Powell River, Campbell River, and Nanaimo public forecasts</li>
+            <li>Model-comparison plots and time-lapse maps</li>
+          </ul>
+          <p class="disclaimer"><strong>Recently completed:</strong> real wind/wave buoy observations; Favourite Places-style saved map points with symbols, notes and local storage; stationary Signal K integration; and the initial FISHING section with official DFO links.</p>
+        </details>
+      </details>
+
+      <details class="section-details" id="setup-details">
+        <summary>Setup</summary>
+
+        <!-- 2026-08-07, owner's request: "Move BaseMap tab to above
+             DataRefresh tab. Delete the 'Style' text under BaseMap, move
+             the style box to the same line as 'BaseMap'." Base Map is no
+             longer its own <details>/<summary> accordion section -- once
+             the "Style" label was dropped and the <select> moved onto the
+             header's own line, there was nothing left inside the old
+             section body to expand/collapse (this select WAS the whole
+             section's content), so a collapsible wrapper around empty
+             space didn't make sense any more. Now a plain
+             ".field.field-inline" row instead (same label+control-on-one-
+             line pattern as Boat speed/Departure time under Layout
+             Route), moved to the FIRST position under Setup (was third,
+             after Data Refresh/Area of Operations -- see CHANGELOG.md for
+             the removed <details> block's own history: the previous
+             "Simple style" toggle that used to live in that section too,
+             the Basemap-tab/three-options build, Plain's colour
+             inversion, and the temporary brightness/contrast/saturation
+             tuner, all now closed out). #basemap-select itself
+             (options/wiring in app.js) is unchanged by this move. -->
+        <div class="field field-inline">
+          <label for="basemap-select"><strong>Base Map</strong></label>
+          <select id="basemap-select" aria-label="Base map style">
+            <option value="standard" hidden disabled>Standard (OpenStreetMap — online)</option>
+            <option value="topo" hidden disabled>Topographic (online)</option>
+            <option value="canvecOffline" selected>Offline CANVEC</option>
+          </select>
+          <!-- 2026-08-07, owner's request: "remove Plain - we'll fight
+               with that another day." A "Plain" grey/white cartographic
+               style went through four rounds this session (light_all +
+               invert filter, dark_all + brightness filter -- real
+               grey-vs-white separation but a stipple-texture/illegible-
+               labels complaint, a real Government of Canada "Simple Grey"
+               ArcGIS service -- came up blank, cause undiagnosed) without
+               landing anywhere the owner was happy with -- see app.js's
+               window.BASE_LAYERS comment (git history/CHANGELOG.md if that
+               comment itself is gone by the time this is revisited) for
+               the full trail if picked back up. Default reverted to
+               "standard" -- was "plain" only because of this now-abandoned
+               experiment; "standard" was the default before any of it
+               started. -->
+        </div>
+        <div class="field online-basemaps-optin">
+          <label title="Online maps download tiles from the internet and may use significant cellular data.">
+            <input type="checkbox" id="online-basemaps-toggle">
+            <span>Enable online maps (uses internet/data)</span>
+          </label>
+        </div>
+        <details class="section-details" id="kids-parental-details">
+          <summary>KIDS time limit</summary>
+          <p class="disclaimer">Dad controls local game time on this laptop. This is a family convenience lock, not secure account protection.</p>
+          <div class="field field-inline"><label for="kids-parent-password">Password</label><input id="kids-parent-password" type="password" maxlength="80"></div>
+          <div class="field field-inline"><label for="kids-time-minutes">Minutes</label><input id="kids-time-minutes" type="number" min="1" max="240" value="30"></div>
+          <div class="vessel-actions"><button type="button" id="kids-password-save-btn">Set/change password</button><button type="button" id="kids-session-start-btn">Set kids time</button><button type="button" id="kids-session-stop-btn">Stop today</button></div>
+          <div id="kids-parent-status" class="disclaimer">KIDS is locked.</div>
+        </details>
+
+        <details class="section-details" id="vessel-integration-details">
+          <summary>Vessel Integration</summary>
+          <div class="vessel-actions">
+            <button type="button" id="vessel-manual-btn">Set vessel position on map</button>
+            <button type="button" id="vessel-device-gps-btn">Use this device's GPS</button>
+          </div>
+          <div class="field field-inline">
+            <label for="signalk-url">Signal K server</label>
+            <input id="signalk-url" type="text" value="http://10.39.1.1:3000" spellcheck="false" aria-label="Signal K server URL">
+          </div>
+          <div class="field field-inline">
+            <label for="signalk-token">Access token</label>
+            <input id="signalk-token" type="password" autocomplete="off" spellcheck="false" placeholder="optional">
+          </div>
+          <input type="checkbox" id="signalk-auto-connect-toggle" checked hidden>
+          <div class="vessel-actions">
+            <button type="button" id="signalk-connect-btn">Connect Signal K</button>
+            <button type="button" id="vessel-record-btn" class="recording-on" aria-pressed="true">Automatic recording: ON</button>
+          </div>
+          <details class="section-details" id="vessel-housekeeping-details">
+            <summary>Housekeeping</summary>
+            <label class="checkbox-label"><input type="checkbox" id="vessel-housekeeping-toggle"><span>Turn on housekeeping controls</span></label>
+            <div id="vessel-housekeeping-controls" hidden>
+              <div class="vessel-actions">
+                <button type="button" id="vessel-new-voyage-btn">New voyage</button>
+                <button type="button" id="vessel-export-btn">Export GeoJSON</button>
+                <button type="button" id="vessel-export-csv-btn">Export CSV log</button>
+                <button type="button" id="vessel-backup-btn">Backup JSON</button>
+                <button type="button" id="vessel-import-btn">Import backup</button>
+                <input type="file" id="vessel-import-file" accept="application/json,.json" hidden>
+                <button type="button" id="vessel-clear-track-btn">Clear today's track</button>
+              </div>
+              <p class="disclaimer">These controls can replace, export, or clear saved voyage data.</p>
+            </div>
+          </details>
+          <label class="checkbox-label vessel-track-toggle" hidden>
+            <input type="checkbox" id="vessel-track-toggle" checked>
+            <span>Always show entire saved track on map</span>
+          </label>
+          <label class="checkbox-label vessel-track-toggle">
+            <input type="checkbox" id="vessel-instruments-overlay-toggle">
+            <span>Show instruments on map</span>
+          </label>
+          <label class="checkbox-label vessel-track-toggle">
+            <input type="checkbox" id="ais-overlay-toggle">
+            <span>Show nearby AIS vessels (10 NM)</span>
+          </label>
+          <p class="disclaimer"><strong>AIS overlay is situational awareness only—not collision avoidance.</strong> Targets disappear after five minutes without an update. Use the vessel's certified AIS/navigation equipment for decisions.</p>
+          <div id="vessel-status" class="vessel-status" aria-live="polite">No vessel position. Set one manually or connect a live source.</div>
+          <details class="onboard-checks" id="onboard-checks-details">
+            <summary>Guided onboard check</summary>
+            <p class="disclaimer">Stationary-safe checks only. SailVu presents each action; you confirm what you see.</p>
+            <button type="button" id="onboard-check-start-btn">Start onboard check</button>
+            <div id="onboard-check-panel" hidden>
+              <p><strong id="onboard-check-progress"></strong></p>
+              <p id="onboard-check-action"></p>
+              <label class="field">Notes <input id="onboard-check-notes" type="text" placeholder="optional observation"></label>
+              <div class="vessel-actions">
+                <button type="button" data-onboard-result="pass">Pass</button>
+                <button type="button" data-onboard-result="problem">Problem</button>
+                <button type="button" data-onboard-result="skip">Skip</button>
+              </div>
+            </div>
+            <div id="onboard-check-summary" class="disclaimer"></div>
+            <button type="button" id="onboard-check-export-btn" hidden>Export check report</button>
+          </details>
+          <aside class="vessel-instruments vessel-instruments-overlay" id="vessel-instruments" hidden aria-label="Vessel instruments">
+            <strong class="vessel-instruments-drag-handle" role="button" tabindex="0" aria-expanded="true" title="Drag to move; click to collapse">Instruments</strong>
+            <span>Position <strong data-vessel-value="position">--</strong></span>
+            <span>SOG <strong data-vessel-value="sog">--</strong></span>
+            <span>COG <strong data-vessel-value="cog">--</strong></span>
+            <span>Heading <strong data-vessel-value="heading">--</strong></span>
+            <span>STW <strong data-vessel-value="stw">--</strong></span>
+            <span>App wind <strong data-vessel-value="awa">--</strong></span>
+            <span>Depth <strong data-vessel-value="depth">--</strong></span>
+            <span>Water <strong data-vessel-value="waterTemp">--</strong></span>
+            <span class="instrument-overlay-age">Data age <strong data-vessel-value="age">--</strong></span>
+          </aside>
+          <div id="vessel-quality-warning" class="vessel-quality-warning" hidden></div>
+          <details class="vessel-instrument-details">
+            <summary>Instrument details</summary>
+            <div id="vessel-instrument-detail-table"></div>
+          </details>
+          <p id="vessel-log-summary" class="disclaimer">Today's voyage log is empty.</p>
+          <details class="vessel-log-storage">
+            <summary>Saved voyage logs</summary>
+            <div id="vessel-storage-summary" class="disclaimer"></div>
+            <div id="vessel-auto-report-status" class="disclaimer">Automatic report archive is startingâ€¦</div>
+            <div id="vessel-saved-logs"></div>
+          </details>
+          <details class="vessel-diagnostics">
+            <summary>Signal K diagnostics</summary>
+            <div id="signalk-diagnostics">Not connected.</div>
+            <button type="button" id="signalk-diagnostics-export-btn">Export diagnostics</button>
+          </details>
+          <p class="disclaimer"><strong>Automatic connection and recording are ON by default.</strong> SAILVu connects using the saved server address (never a saved token), records every 10 seconds when SOG is at least 0.5 kn and hourly while stationary/at anchor, and starts a separate saved log after midnight.</p>
+          <p class="disclaimer">Signal K accepts a hostname or IP address on the boat Wi-Fi. Position, course/speed, heading, water speed, wind, depth, and water temperature are logged when published. Data older than 15 seconds is marked stale.</p>
+        </details>
+
+        <details class="section-details map-tuning-panel" id="map-display-tuning-details">
+          <summary>Map Display Tuning</summary>
+          <p class="disclaimer">Temporary visual calibration tool. Values repaint immediately. Wind-arrow sizing applies at every zoom and to station winds; other values are stored by product and zoom.</p>
+          <div class="field field-inline">
+            <label for="map-tuning-product">Product</label>
+            <select id="map-tuning-product">
+              <option value="waves">Wave heights</option>
+              <option value="opposition-seacast">Wind/current opposition — SeaCast</option>
+              <option value="opposition-ciops">Wind/current opposition — CIOPS</option>
+              <option value="wind-arrows">Wind arrows</option>
+              <option value="tide-height">Tide height markers</option>
+            </select>
+          </div>
+          <div class="field field-inline"><span>Current zoom</span><strong id="map-tuning-zoom">10</strong></div>
+          <label class="map-tuning-slider" id="map-tuning-diameter-row">Point diameter
+            <input type="range" id="map-tuning-diameter" min="1" max="125" step="1">
+            <output id="map-tuning-diameter-value"></output>
+          </label>
+          <label class="map-tuning-slider" id="map-tuning-blur-row">Blur / visual blending
+            <input type="range" id="map-tuning-blur" min="0" max="20" step="0.25">
+            <output id="map-tuning-blur-value"></output>
+          </label>
+          <div id="map-tuning-wind-arrow-controls" hidden>
+            <label class="map-tuning-slider">Arrow length
+              <input type="range" id="map-tuning-arrow-length" min="50" max="300" step="5" value="100">
+              <output id="map-tuning-arrow-length-value">100%</output>
+            </label>
+            <label class="map-tuning-slider">Arrow thickness
+              <input type="range" id="map-tuning-arrow-thickness" min="1" max="8" step="0.25" value="1">
+              <output id="map-tuning-arrow-thickness-value">1.00×</output>
+            </label>
+          </div>
+          <div id="map-tuning-label-offsets" hidden>
+            <label class="map-tuning-slider">Number horizontal nudge
+              <input type="range" id="map-tuning-label-x" min="-20" max="20" step="1" value="0">
+              <output id="map-tuning-label-x-value">0 px</output>
+            </label>
+            <label class="map-tuning-slider">Number vertical nudge
+              <input type="range" id="map-tuning-label-y" min="-20" max="20" step="1" value="0">
+              <output id="map-tuning-label-y-value">0 px</output>
+            </label>
+          </div>
+          <div class="field" id="map-tuning-position-row"><strong>Position nudge</strong> <span id="map-tuning-offset-value" class="disclaimer"></span></div>
+          <div class="map-nudge-grid" id="map-tuning-nudge-grid" aria-label="Nudge selected product by one native grid point">
+            <button type="button" id="map-nudge-north" title="Nudge north one point">↑</button>
+            <button type="button" id="map-nudge-west" title="Nudge west one point">←</button>
+            <button type="button" id="map-nudge-reset" title="Reset product position">Reset position</button>
+            <button type="button" id="map-nudge-east" title="Nudge east one point">→</button>
+            <button type="button" id="map-nudge-south" title="Nudge south one point">↓</button>
+          </div>
+          <div class="vessel-actions">
+            <button type="button" id="map-tuning-reset-zoom">Reset this zoom</button>
+            <button type="button" id="map-tuning-reset-product">Reset all zooms for product</button>
+          </div>
+          <p class="disclaimer">Blur zero shows discrete points. Position nudges apply to the product at every zoom. This controls display alignment and visual blending, not geographic interpolation across land.</p>
+        </details>
+
+        <details class="section-details">
+          <summary>Data Refresh <strong id="data-refresh-heading-status" class="data-refresh-heading refresh-needed">Refresh</strong></summary>
+          <div id="data-freshness" hidden></div>
+          <div id="data-readiness" class="data-readiness" aria-live="polite">
+            <strong id="data-readiness-title">Checking data…</strong>
+            <span id="data-readiness-action"></span>
+          </div>
+          <details class="data-status-details">
+            <summary>Data details</summary>
+            <div class="data-status-table-wrap">
+              <table class="data-status-table" aria-label="Status of downloaded data products">
+                <thead><tr><th>Data</th><th>Status</th><th>Source</th><th>Coverage</th><th>Valid through</th><th>Updated</th></tr></thead>
+                <tbody id="data-status-body"></tbody>
+              </table>
+            </div>
+            <p class="disclaimer">Technical details for diagnosis. Normal operation uses the readiness message above and automatic refresh.</p>
+          </details>
+          <div class="field field-inline">
+            <label for="refresh-mode-select"><strong>Download plan</strong></label>
+            <button type="button" id="download-plan-help" class="verification-help-btn" aria-label="Explain download plans" title="Explain download plans">?</button>
+            <select id="refresh-mode-select">
+              <option value="cellular">Cellular Minimum — EC only</option>
+              <option value="voyage" selected>Voyage Region — drawn box</option>
+              <option value="full">Shore Wi-Fi — full region before departure</option>
+            </select>
+          </div>
+          <div id="download-plan-summary" class="disclaimer" hidden></div>
+          <div id="voyage-region-controls" class="download-aoi-actions admin-only" hidden>
+            <button type="button" id="download-draw-aoi-btn">Draw box</button>
+            <button type="button" id="download-clear-aoi-btn">Use default box</button>
+            <span id="voyage-region-info"></span>
+          </div>
+          <div class="download-planner" id="download-planner">
+            <table class="download-matrix" aria-label="Download size estimates and progress">
+              <thead><tr><th scope="col">Data</th>
+                <th scope="col"><label><input type="radio" name="download-hours" data-download-hours="24">24h</label></th>
+                <th scope="col"><label><input type="radio" name="download-hours" data-download-hours="48" checked>48h</label></th>
+                <th scope="col"><label><input type="radio" name="download-hours" data-download-hours="72">72h</label></th>
+              </tr></thead>
+              <tbody>
+                <tr><th scope="row"><label><input type="checkbox" data-download-product="currents" checked> Currents</label></th><td data-download-cell="currents:24"></td><td data-download-cell="currents:48"></td><td data-download-cell="currents:72"></td></tr>
+                <tr><th scope="row"><label><input type="checkbox" data-download-product="wind" checked> Wind</label></th><td data-download-cell="wind:24"></td><td data-download-cell="wind:48"></td><td data-download-cell="wind:72"></td></tr>
+                <tr><th scope="row"><label><input type="checkbox" data-download-product="waves" checked> Waves</label></th><td data-download-cell="waves:24"></td><td data-download-cell="waves:48"></td><td data-download-cell="waves:72"></td></tr>
+                <tr><th scope="row"><label><input type="checkbox" data-download-product="tides" checked> Tides</label></th><td data-download-cell="tides:24"></td><td data-download-cell="tides:48"></td><td data-download-cell="tides:72"></td></tr>
+                <tr><th scope="row"><label><input type="checkbox" data-download-product="ec" checked> EC forecasts</label></th><td data-download-cell="ec:24"></td><td data-download-cell="ec:48"></td><td data-download-cell="ec:72"></td></tr>
+              </tbody>
+              <tfoot><tr><th scope="row">TOTAL</th><td data-download-total="24"></td><td data-download-total="48"></td><td data-download-total="72"></td></tr></tfoot>
+            </table>
+            <div class="download-estimate" id="download-estimate" aria-live="polite"></div>
+            <p class="disclaimer connectivity-fallback-note" hidden><strong>Automatic fallback:</strong> if FULL/REGIONAL cannot complete, SAILVu tries ESSENTIAL (EC forecasts/warnings + tides/gates), then BRIEFING (EC forecasts/warnings only). Previous model files are retained.</p>
+            <details class="download-research-details">
+              <summary>Research and diagnostics</summary>
+              <p><a href="DATA_INGEST_RESEARCH.md" target="_blank" rel="noopener">Open data-ingest research notes</a></p>
+              <div class="download-test-results" id="download-test-results"></div>
+            </details>
+          </div>
+          <div class="field refresh-action-row">
+            <button id="refresh-btn">Refresh</button>
+            <button id="refresh-stop-btn" disabled>Stop download</button>
+            <span id="refresh-status" class="refresh-status-text"></span>
+            <div id="refresh-timer" class="refresh-timer-text">No refresh time recorded for this option.</div>
+          </div>
+          <div class="field">
+            <label class="checkbox-label" for="auto-refresh-toggle">
+              <input type="checkbox" id="auto-refresh-toggle">
+              <span><strong>Refresh automatically each day</strong></span>
+            </label>
+            <label for="auto-refresh-time">Boat-local time</label>
+            <input type="time" id="auto-refresh-time" value="04:00" step="60">
+            <div id="auto-refresh-status" class="disclaimer" aria-live="polite"></div>
+            <p class="disclaimer">Voyage default: ON. Automatic runs always use the small Cellular Minimum package; larger model downloads remain manual.</p>
+            <p class="disclaimer">Uses the selected Download plan. Leave SAILVu and its helper window running; if the boat is offline at that time, SAILVu will start when connectivity returns.</p>
+          </div>
+          <div id="data-refresh-progress" class="data-refresh-progress" aria-live="polite"></div>
+          <p class="disclaimer" id="cellular-refresh-note" hidden>Downloads only the small official English EC marine XML forecasts and extended forecasts. Existing current, wind, wave, tide and observation data are left unchanged.</p>
+          <!-- 2026-08-06: owner's request -- HRDPS has no server-side range
+               query (see the hourly-wind checkbox's own comment just below),
+               so it's fetched one forecast hour at a time; the owner
+               measured ~5s/hour on a fast connection, ~110s total for the
+               whole pipeline. A live "fetching wind: hour X of Y" status
+               already appears once a refresh is running (see
+               formatPipelineProgress() in app.js) -- this is just the
+               up-front expectation, so the button doesn't look frozen
+               before that live text appears.
+
+               2026-08-07, owner's request: "move this message to a popup
+               that disappears when data is refreshed" -- the always-on
+               <p> is gone; the same text now only appears as a popup
+               (reuses showInfoPopup()/the existing About-button modal
+               look, not a new one), opened by refreshDataFiles() right
+               when "Refresh data" is clicked and closed automatically in
+               that function's own `finally` block (runs on success AND
+               failure -- see refreshDataFiles()'s own comment in app.js),
+               so it's gone by the time the refresh attempt concludes
+               either way. Still has its normal close button/backdrop
+               click too, for anyone who doesn't want to wait it out. -->
+          <div id="refresh-info-text" hidden>
+            A complete all-data download takes about 8 minutes on a
+            fibre-optic connection. Smaller product or forecast selections
+            will usually finish sooner. Progress appears in the selected
+            table cells while the download runs.
+          </div>
+          <!-- 2026-08-04: owner's request -- wind is thinned by default
+               (every 2nd forecast hour, see HRDPS_WIND_HOUR_STRIDE in
+               fetch_model_data.py) because Datamart has no server-side
+               range query, so fetching every hour is genuinely slow. This
+               opts back into full hourly resolution, with an explicit
+               wait-time warning since that's the tradeoff being made. -->
+          <label class="checkbox-label" id="wind-hourly-label" style="font-size:11px;color:#666;" title="Fetches every HRDPS forecast hour instead of every 2nd -- roughly doubles wind-track download time."><input type="checkbox" id="wind-hourly-toggle"><span>Full hourly wind resolution (slower)</span></label>
+        </details>
+
+        <details class="section-details" id="updates-feedback-details">
+          <summary>Updates &amp; Feedback</summary>
+          <p class="disclaimer">With internet available, check for small approved SailVu additions. Nothing installs automatically.</p>
+          <div class="vessel-actions"><button type="button" id="update-check-btn">Check for updates</button><button type="button" id="update-install-btn" hidden>Install update</button><button type="button" id="update-rollback-btn" hidden>Roll back last update</button></div>
+          <label class="field">Patch received by email or USB <input type="file" id="local-update-file" accept=".zip,application/zip"></label>
+          <button type="button" id="local-update-stage-btn">Verify patch package</button>
+          <div id="update-status" class="disclaimer">Update channel not checked.</div>
+          <hr>
+          <label class="field">Feedback notes <textarea id="feedback-notes" rows="3" placeholder="What happened, what you expected, and what feature would help?"></textarea></label>
+          <label class="field">Optional screenshot <input type="file" id="feedback-screenshot" accept="image/png,image/jpeg"></label>
+          <label class="checkbox-label"><input type="checkbox" id="feedback-voyage-toggle"><span>Include the last 100 voyage records (includes vessel positions)</span></label>
+          <button type="button" id="feedback-create-btn">Create feedback bundle</button>
+          <div id="feedback-status" class="disclaimer">Creates a sanitized ZIP on this laptop for you to email or copy to Gary/Chris.</div>
+        </details>
+
+      </details>
+
+      <details class="section-details" id="fishing-details">
+        <summary>FISHING</summary>
+        <details class="section-details" id="conservation-layers-details">
+          <summary>Conservation &amp; protected areas</summary>
+          <label class="checkbox-label"><input type="checkbox" id="fishing-restrictions-toggle"><span>Rockfish and fishing restrictions</span></label>
+          <label class="checkbox-label"><input type="checkbox" id="protected-areas-toggle"><span>Marine parks and protected areas</span></label>
+          <label class="checkbox-label"><input type="checkbox" id="dfo-management-areas-toggle"><span>DFO management areas</span></label>
+          <p id="conservation-layers-status" class="disclaimer">No conservation boundary files loaded yet.</p>
+          <p class="disclaimer"><strong>RCA boundaries: DFO July 2019 dataset, clipped to the blue Voyage Region box.</strong> Transparent overlays are planning aids only. Always verify the current RCA variation order and regulations before fishing.</p>
+        </details>
+        <details class="section-details">
+          <summary>Current DFO regulations</summary>
+          <p class="disclaimer">Permanent boundaries and changing regulations are different. Open the official DFO page for the area where you plan to fish.</p>
+          <p><a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/bc-zones-cb-eng.html" target="_blank" rel="noopener"><strong>DFO BC area index and interactive map</strong></a></p>
+          <div class="fishing-area-links">
+            <a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/tidal-maree/a-s12-eng.html" target="_blank" rel="noopener">Area 12</a>
+            <a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/tidal-maree/a-s13-eng.html" target="_blank" rel="noopener">Area 13</a>
+            <a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/tidal-maree/a-s14-eng.html" target="_blank" rel="noopener">Area 14</a>
+            <a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/tidal-maree/a-s15-eng.html" target="_blank" rel="noopener">Area 15</a>
+            <a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/tidal-maree/a-s16-eng.html" target="_blank" rel="noopener">Area 16</a>
+            <a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/tidal-maree/a-s17-eng.html" target="_blank" rel="noopener">Area 17</a>
+            <a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/tidal-maree/a-s18-eng.html" target="_blank" rel="noopener">Area 18</a>
+            <a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/tidal-maree/a-s19-eng.html" target="_blank" rel="noopener">Area 19</a>
+            <a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/tidal-maree/a-s20-eng.html" target="_blank" rel="noopener">Area 20</a>
+            <a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/tidal-maree/a-s28-eng.html" target="_blank" rel="noopener">Area 28</a>
+            <a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/tidal-maree/a-s29-eng.html" target="_blank" rel="noopener">Area 29</a>
+          </div>
+          <p class="disclaimer">DFO pages contain species limits, seasons, gear rules, exceptions, protected-area links and section-specific update dates. They remain authoritative over SailVu.</p>
+        </details>
+      </details>
+
+      <details class="section-details" id="kids-details">
+        <summary><span>KIDS</span><span id="kids-countdown" class="kids-countdown">LOCKED</span></summary>
+        <button type="button" id="first-mates-log-open-btn" class="kids-first-mates-log-btn">First Mate's Log</button>
+        <button type="button" id="kids-stories-open-btn" class="kids-stories-btn">Stories</button>
+        <button type="button" id="fish-game-open-btn" class="kids-daily-catch-btn">Daily Catch</button>
+        <button type="button" id="maze-game-open-btn" class="kids-maze-btn">Maze Puzzle</button>
+        <button type="button" class="kids-puzzle-btn" data-kids-puzzle="word-search">Word Search</button>
+        <button type="button" class="kids-puzzle-btn" data-kids-puzzle="memory-match">Memory Match</button>
+        <button type="button" class="kids-puzzle-btn" data-kids-puzzle="connect-islands">Passage to Nanaimo</button>
+        <button type="button" class="kids-puzzle-btn" data-kids-puzzle="knot-challenge">Knot Challenge</button>
+        <button type="button" class="kids-puzzle-btn" data-kids-puzzle="weather-detective">Weather Detective</button>
+        <button type="button" class="kids-puzzle-btn" data-kids-puzzle="current-tide">Current and Tide Challenge</button>
+        <button type="button" class="kids-puzzle-btn" data-kids-puzzle="fish-habitat">Fish Habitat Match</button>
+        <button type="button" class="kids-puzzle-btn" data-kids-puzzle="shell-sorting">Shell Sorting</button>
+        <div class="first-mates-log-overlay" id="first-mates-log-overlay" hidden>
+          <div class="first-mates-log-window" role="dialog" aria-modal="false" aria-labelledby="first-mates-log-title">
+            <header>
+              <strong id="first-mates-log-title">First Mate's Log</strong>
+              <button type="button" id="first-mates-log-close-btn" aria-label="Close First Mate's Log" title="Close">×</button>
+            </header>
+            <div class="first-mates-log-body">
+              <div class="first-mates-log-fields">
+                <label>Date <input id="first-mates-log-date" type="date"></label>
+                <label>Title <input id="first-mates-log-entry-title" type="text" maxlength="100" placeholder="Today's adventure"></label>
+              </div>
+              <label for="first-mates-log-text"><strong>What happened today?</strong></label>
+              <textarea id="first-mates-log-text" rows="10" maxlength="10000" placeholder="Weather, wildlife, places visited, things learned…"></textarea>
+              <div class="vessel-actions">
+                <button type="button" id="first-mates-log-save-btn">Save entry</button>
+                <button type="button" id="first-mates-log-new-btn">New entry</button>
+                <button type="button" id="first-mates-log-delete-btn" hidden>Delete entry</button>
+              </div>
+              <p id="first-mates-log-status" class="disclaimer" aria-live="polite">Entries are saved on this device and work offline.</p>
+              <h3>Previous entries</h3>
+              <div id="first-mates-log-list" class="first-mates-log-list"></div>
+            </div>
+          </div>
+        </div>
+        <div class="kids-stories-overlay" id="kids-stories-overlay" hidden>
+          <div class="kids-stories-window" role="dialog" aria-modal="false" aria-labelledby="kids-stories-title">
+            <header>
+              <strong id="kids-stories-title">Stories</strong>
+              <button type="button" id="kids-stories-close-btn" aria-label="Close Stories" title="Close">×</button>
+            </header>
+            <div class="kids-stories-body">
+              <h2>Story Library</h2>
+              <a class="kids-story-card" href="assets/stories/Croswell_YoungReaders_Story.pdf" target="_blank" rel="noopener">
+                <strong>From Hampshire to Georgian Bay</strong>
+                <span>The Story of the Croswell Family</span>
+                <small>A true family history for young readers · 20 pages · PDF</small>
+              </a>
+              <a class="kids-story-card" href="assets/stories/Samuel_Morrison_Journey.pdf" target="_blank" rel="noopener">
+                <strong>Samuel Morrison's Journey</strong>
+                <span>From County Cavan to the Canadian Forest</span>
+                <small>A true family story retold for ages 8 to 11 · 12 pages · PDF</small>
+              </a>
+              <a class="kids-story-editable" href="assets/stories/Samuel_Morrison_Journey.docx" download>Download the editable Word edition</a>
+            </div>
+          </div>
+        </div>
+            <div class="fish-game-overlay" id="fish-game-overlay" hidden>
+              <div class="fish-game-window" role="dialog" aria-modal="false" aria-labelledby="fish-game-title">
+                <div class="fish-game-window-header">
+                  <span class="fish-game-title-group"><strong id="fish-game-title">Daily Catch</strong><button type="button" id="fish-game-help-btn" class="fish-game-help-btn" aria-label="About Daily Catch" title="About Daily Catch">?</button></span>
+                  <button type="button" id="fish-game-close-btn" class="fish-game-close-btn" aria-label="Close Daily Catch" title="Close">×</button>
+                </div>
+                <div class="fish-game" id="fish-game">
+                  <div id="fish-game-help" class="fish-game-help" hidden>
+                    <p>Drag the popup's lower-right corner to resize the fish image and controls.</p>
+                    <p>The game and its fish images work offline. Scores are kept on this device.</p>
+                    <p>Fish images and identification names: <a href="https://www.pac.dfo-mpo.gc.ca/fm-gp/rec/identify-identifier-eng.html" target="_blank" rel="noopener">Fisheries and Oceans Canada — Identify your catch</a>.</p>
+                  </div>
+              <div id="fish-game-start">
+                <label class="field" for="fish-player-name"><strong>Player name</strong></label>
+                <input id="fish-player-name" type="text" maxlength="40" autocomplete="name" placeholder="Enter your name">
+                <label class="field" for="fish-game-category"><strong>Catch group</strong></label>
+                <select id="fish-game-category">
+                  <option value="all">All catches</option>
+                  <option value="salmon">Pacific salmon</option>
+                  <option value="trout">Trout</option>
+                  <option value="groundfish">Groundfish</option>
+                  <option value="rockfish">Rockfish</option>
+                  <option value="finfish">Saltwater finfish</option>
+                  <option value="shellfish">Shellfish</option>
+                  <option value="crab">Crab</option>
+                </select>
+                <button type="button" id="fish-game-start-btn">Start fishing</button>
+              </div>
+              <div id="fish-game-round" hidden>
+                <div class="fish-game-score"><span id="fish-game-player"></span> · Catch: <strong id="fish-game-score">0</strong></div>
+                <div class="fish-game-image-frame"><img id="fish-game-image" src="" alt="Fish to identify"></div>
+                <p class="fish-game-prompt"><strong>What fish is this?</strong></p>
+                <div id="fish-game-choices" class="fish-game-choices"></div>
+                <div id="fish-game-feedback" class="fish-game-feedback" aria-live="assertive"></div>
+                <div id="fish-game-streak" class="fish-game-streak" aria-live="polite"></div>
+                <button type="button" id="fish-game-finish-btn" class="fish-game-finish">How many did you catch?</button>
+              </div>
+              <div id="fish-game-results" hidden>
+                <h3>Today's Daily Catch</h3>
+                <div id="fish-game-total" class="fish-game-total"></div>
+                <div id="fish-game-haul-message" class="fish-game-haul-message" aria-live="polite"></div>
+                <button type="button" id="fish-game-again-btn">Fish again</button>
+                <h3>Everyone's catches</h3>
+                <div id="fish-game-scoreboard"></div>
+              </div>
+                </div>
+              </div>
+            </div>
+        <div class="maze-game-overlay" id="maze-game-overlay" hidden>
+          <div class="maze-game-window" role="dialog" aria-modal="false" aria-labelledby="maze-game-title">
+            <div class="maze-game-window-header">
+              <strong id="maze-game-title">Maze Puzzle</strong>
+              <button type="button" id="maze-game-help-btn" class="maze-game-help-btn" aria-label="About Maze Puzzle" title="About Maze Puzzle">?</button>
+              <button type="button" id="maze-game-close-btn" class="maze-game-close-btn" aria-label="Close Maze Puzzle" title="Close">×</button>
+            </div>
+            <div class="maze-game-body">
+              <div id="maze-game-help" class="maze-game-help" hidden>Guide the blue boat from START to the gold treasure. Use the arrow keys, WASD, or the arrow buttons. Each new puzzle has a different route.</div>
+              <div class="maze-game-toolbar">
+                <label for="maze-player-name">Player</label>
+                <input type="text" id="maze-player-name" maxlength="40" placeholder="Enter name">
+                <button type="button" id="maze-game-play-btn">Play puzzle</button>
+                <label for="maze-game-difficulty">New puzzle level</label>
+                <select id="maze-game-difficulty">
+                  <option value="1">1 — Easy</option><option value="2">2 — Medium</option><option value="3">3 — Hard</option><option value="4">4 — Expert</option>
+                </select>
+                <button type="button" id="maze-game-new-btn">Add a new puzzle</button>
+                <span>Puzzle: <strong id="maze-game-number">1</strong></span>
+                <span>Level: <strong id="maze-game-level">1</strong></span>
+                <span>Moves: <strong id="maze-game-moves">0</strong></span>
+                <span>Time: <strong id="maze-game-time">0:00</strong></span>
+              </div>
+              <canvas id="maze-game-canvas" width="600" height="600" aria-label="Interactive maze puzzle"></canvas>
+              <div id="maze-game-message" class="maze-game-message" aria-live="assertive"></div>
+              <div class="maze-game-controls" aria-label="Maze movement controls">
+                <button type="button" data-maze-move="up" aria-label="Move up">↑</button>
+                <button type="button" data-maze-move="left" aria-label="Move left">←</button>
+                <button type="button" data-maze-move="down" aria-label="Move down">↓</button>
+                <button type="button" data-maze-move="right" aria-label="Move right">→</button>
+              </div>
+              <section class="maze-game-score-section">
+                <h3>Puzzle scoreboard</h3>
+                <div id="maze-game-scoreboard"></div>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div id="kids-puzzle-overlay" class="kids-pack-overlay" hidden>
+          <div class="kids-pack-window" role="dialog" aria-modal="false" aria-labelledby="kids-pack-title">
+            <header><strong id="kids-pack-title">Puzzle</strong><button type="button" id="kids-pack-close" aria-label="Close">×</button></header>
+            <div id="kids-pack-body" class="kids-pack-body"></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="section-details" id="mark-location-details">
+        <summary>MARK LOCATION</summary>
+        <button type="button" id="map-point-add-btn">Mark a location</button>
+        <p class="disclaimer" id="map-point-instruction">Click the button, then click the map to add a point.</p>
+        <div id="map-point-editor" class="map-point-editor" hidden>
+          <div class="field field-inline"><span>Position</span><strong id="map-point-position"></strong></div>
+          <div class="field field-inline">
+            <label for="map-point-symbol">Symbol</label>
+            <select id="map-point-symbol" aria-label="Location symbol">
+              <option value="pin">📍 Pin</option>
+              <option value="anchor">⚓ Anchor</option>
+              <option value="marina">⛵ Marina</option>
+              <option value="hazard">⚠️ Hazard</option>
+              <option value="waypoint">● Waypoint</option>
+              <option value="fishing">🎣 Fishing</option>
+              <option value="fish">🐟 Fish</option>
+              <option value="whale">🐋 Whale</option>
+              <option value="restaurant">🍽️ Pub / Restaurant</option>
+              <option value="swimming">🏊 Swimming</option>
+              <option value="store">🛒 Store</option>
+              <option value="custom">＋ Custom icon</option>
+            </select>
+          </div>
+          <div class="field"><label for="map-point-name">Name</label><input id="map-point-name" type="text" maxlength="100"></div>
+          <div class="field"><label for="map-point-description">Description</label><textarea id="map-point-description" rows="3" maxlength="1000"></textarea></div>
+          <div class="field" id="map-point-custom-row" hidden>
+            <label for="map-point-custom-url">PNG or SVG image URL</label>
+            <input id="map-point-custom-url" type="url" placeholder="https://…">
+            <p class="disclaimer">Your custom icons can be added here later. Online image URLs require internet access.</p>
+          </div>
+          <label class="map-tuning-slider">Symbol size
+            <input type="range" id="map-point-size" min="12" max="96" step="2" value="32">
+            <output id="map-point-size-value">32 px</output>
+          </label>
+          <div class="vessel-actions">
+            <button type="button" id="map-point-save-btn">Save point</button>
+            <button type="button" id="map-point-cancel-btn">Cancel</button>
+          </div>
+        </div>
+        <div id="map-point-list" class="map-point-list"></div>
+      </details>
+
+      <details class="section-details">
+        <summary>Ocean</summary>
+        <!-- 2026-08-06, later session (owner's request): renamed from
+             "Currents/Waves" to "Ocean" and split into three nested
+             sub-tabs (Currents / Sea State / Tides) so each tool group
+             gets its own expand/collapse instead of one long flat list --
+             same nested-<details> pattern already used by Setup (Data
+             Refresh/Area of Operations) and Planning (Layout Route/Query
+             Route) above. Every moved control below kept its exact
+             element id -- this is a pure DOM relocation, no app.js wiring
+             changed. -->
+
+        <details class="section-details">
+          <summary>Currents</summary>
+          <!-- 2026-08-03: "Current Field"/"Wind Field" collapsed from their own
+               nested <details> sub-sections into a single always-visible row
+               each (checkbox + About button), per the owner's request to cut
+               sidebar verbosity -- toggling the arrows no longer needs its own
+               expand click. The status/freshness text that used to sit inline
+               here (#current-field-info/#wind-field-info, kept updated by the
+               same app.js code as before, unchanged) now lives inside an
+               "About" popup instead (showInfoPopup() in app.js, reusing the
+               existing graph-modal overlay styling) -- [hidden] here, shown
+               copied into the popup body on click. The heat-map toggle and
+               its colour-scale <select> share one .map-toggle-row/
+               .checkbox-label line (moved there from a separate row after
+               several rounds of owner feedback -- see README.md's changelog
+               for the full sequence); "(experimental)" and the "Heat map
+               colour scale" label text were both dropped from the visible
+               UI per the owner's follow-up requests (the latter moved to
+               the select's own aria-label instead, not lost). -->
+          <!-- 2026-08-06, later session (owner's request: "Delete 'Current
+               arrows'. Add SalishSeaCast Model button. Add CIOPS Model
+               button. Gate boxes off by default, on when button clicked.
+               Add Gate boxes button under the Currents tab."): the single
+               "Current arrows" checkbox is replaced by three independent
+               ones. Gate boxes (gateBoxesEnabled) also now controls
+               loadGateStations()'s station dots/red click-boxes AND the
+               DFO-gate current arrows together -- see that flag's own
+               comment in app.js. SalishSeaCast/CIOPS Model each gate their
+               own source's field arrows only (salishSeaCastArrowsEnabled/
+               ciopsArrowsEnabled). The "About" button/popup is unchanged,
+               just relocated onto this row (still shows the same
+               #current-field-info content).
+
+               2026-08-07, owner's request: "no currents by default" --
+               both checkboxes' `checked` attribute removed (were both
+               checked, "on unless you turn it off"). Matching
+               app.js `let salishSeaCastArrowsEnabled`/`ciopsArrowsEnabled`
+               initial values also flipped to false -- see those
+               declarations' own comment.
+
+               2026-08-07, owner's request: "Change 'Gate boxes' to 'Gate
+               Currents' - show boxes and currents." Label text only --
+               #gate-boxes-toggle already drives both the station dots/
+               click-boxes AND the DFO-gate current arrows together (see
+               gateBoxesToggle's listener in app.js, unchanged), so the new
+               name just states what this control has done since
+               2026-08-06 rather than changing behavior. Element id left
+               as gate-boxes-toggle (app.js wiring unchanged). -->
+          <!-- 2026-08-07, later session (owner's request): "Under
+               OCEAN/Currents: if data is not available, add 'not
+               available' in bold red font immediately after the parameter
+               name." One <span class="param-unavailable-badge" hidden>
+               per data-backed parameter row below, nested INSIDE the
+               .checkbox-label (not a sibling of it) so rows that also have
+               a trailing "About" button (SalishSeaCast Model) keep exactly
+               two flex children -- label, button -- and .map-toggle-row's
+               own justify-content: space-between still pins the button
+               flush right, unaffected by the badge. Shown/hidden by
+               updateCurrentSourceAvailability() in app.js, which checks
+               each source's own real record count (loadCurrentField()'s
+               own source filter for SalishSeaCast/CIOPS, loadDfoGateRecords()
+               for Gate Currents, loadHeatMapCurrentField() for the heat
+               map) -- NOT tied to the checkbox's own checked state, so a
+               badge can show even on an unchecked/off row: this reports
+               whether data EXISTS to show, independent of whether the
+               owner currently has that layer turned on. -->
+          <div class="field map-toggle-row">
+            <label class="checkbox-label"><input type="checkbox" id="gate-boxes-toggle"><span>Gate Currents</span><span id="gate-currents-unavailable-badge" class="param-unavailable-badge" hidden>not available</span></label>
+          </div>
+          <!-- 2026-08-06, even later session (owner's request: "Delete the
+               'Current data source' text and box - we now have buttons"):
+               the #current-source-select dropdown right below this (kept
+               in the previous round specifically BECAUSE it drove more
+               than just arrow visibility -- heat map/ETA/tooltips too) is
+               now gone outright. SalishSeaCast Model/CIOPS Model below are
+               the sole source of truth for all of that now -- see
+               loadCurrentField()'s own filter and
+               refreshAfterCurrentSourceChange() in app.js (replaces
+               setCurrentSourceMode(), same full re-render list, just
+               triggered by these two checkboxes instead of a select). -->
+          <div class="field map-toggle-row">
+            <label class="checkbox-label"><input type="checkbox" id="current-source-salishseacast-toggle"><span>SalishSeaCast Model</span><span id="salishseacast-unavailable-badge" class="param-unavailable-badge" hidden>not available</span></label>
+            <button type="button" class="graph-link" id="current-field-about-btn">About</button>
+          </div>
+          <div class="field map-toggle-row">
+            <label class="checkbox-label"><input type="checkbox" id="current-source-ciops-toggle"><span>CIOPS Model</span><span id="ciops-unavailable-badge" class="param-unavailable-badge" hidden>not available</span></label>
+          </div>
+          <div id="current-field-info" hidden></div>
+          <div class="field map-toggle-row">
+            <label class="checkbox-label"><input type="checkbox" id="heatmap-toggle"><span>Current-speed heat map</span><span id="heatmap-unavailable-badge" class="param-unavailable-badge" hidden>not available</span></label>
+            <select id="heatmap-gradient" aria-label="Heat map colour scale">
+              <option value="classic">Classic (blue&ndash;lime&ndash;red)</option>
+              <option value="ocean">Ocean blues</option>
+              <option value="viridis">Viridis</option>
+              <option value="rainbow" selected>Rainbow (jet)</option>
+            </select>
+          </div>
+          <!-- 2026-08-06, later session (owner's request): the "Wind arrows"
+               toggle + its About popup + EC-warnings disclaimer moved to the
+               Wind/Weather tab -- see that tab's own comment for why. -->
+
+          <!-- 2026-08-05: read-only mirror of the floating map-time scrubber
+               (app.js's renderFieldTimeControl()) -- per the README scoping
+               decision, the map-floating control is the one real
+               slider/buttons, this is just status text + its own "Now"
+               button, kept in sync on every scrub step. Lives under
+               Currents (not its own sub-tab) since it's the current field's
+               own time control (currentFieldTimeSteps() in app.js). -->
+        </details>
+
+        <details class="section-details">
+          <summary>Sea Temperature</summary>
+          <div class="field map-toggle-row">
+            <label class="checkbox-label sst-toggle-label"><input type="checkbox" id="sst-toggle"><span>Sea temperature</span></label>
+            <label class="field sst-opacity-control">Opacity <input type="range" id="sst-opacity" min="20" max="100" value="72"></label>
+          </div>
+          <select id="sst-scene" class="sst-scene-picker" aria-label="SST scene"></select>
+          <details class="sst-calibration-details">
+            <summary>Calibration</summary>
+            <div class="field map-toggle-row">
+              <label class="field">Calibration slope <input type="number" id="sst-slope" value="1" step="0.01"></label>
+              <label class="field">Calibration offset &deg;C <input type="number" id="sst-offset" value="0" step="0.1"></label>
+            </div>
+            <div class="field map-toggle-row">
+              <label class="field">Maximum buoy/image time gap (hours) <input type="number" id="sst-calibration-hours" value="24" min="1" max="168" step="1"></label>
+              <button type="button" id="sst-calibration-plot">Measured vs satellite SST</button>
+            </div>
+          </details>
+        </details>
+
+        <details class="section-details">
+          <summary>Sea State</summary>
+          <!-- 2026-08-03: wave map (renderWaveMap() in app.js) -- started as
+               plain colored dots, upgraded same day to a smooth bilinearly-
+               interpolated mesh (buildWaveMeshQuads()), same approach as the
+               current-speed heat map above, plus its own gradient picker
+               (same HEATMAP_GRADIENTS set). No About popup (kept minimal). -->
+          <div class="field map-toggle-row">
+            <label class="checkbox-label"><input type="checkbox" id="wave-toggle"><span>Wave heights</span></label>
+            <select id="wave-gradient" aria-label="Wave height colour scale">
+              <option value="classic">Classic (blue&ndash;lime&ndash;red)</option>
+              <option value="ocean">Ocean blues</option>
+              <option value="viridis">Viridis</option>
+              <option value="rainbow" selected>Rainbow (jet)</option>
+            </select>
+          </div>
+          <div class="field map-toggle-row">
+            <label class="checkbox-label"><input type="checkbox" id="wind-current-interaction-toggle"><span>Wind/current opposition</span></label>
+            <select id="wind-current-interaction-source" aria-label="Wind/current interaction current model">
+              <option value="salishseacast" selected>SeaCast</option>
+              <option value="ciops">CIOPS</option>
+            </select>
+            <select id="wind-current-interaction-gradient" aria-label="Wind/current interaction colour scale">
+              <option value="classic">Classic (blue&ndash;lime&ndash;red)</option>
+              <option value="ocean">Ocean blues</option>
+              <option value="viridis">Viridis</option>
+              <option value="rainbow" selected>Rainbow (jet)</option>
+            </select>
+            <button type="button" class="graph-link" id="wind-current-interaction-about-btn" aria-label="About wind/current opposition">?</button>
+          </div>
+          <div id="wind-current-interaction-info" hidden>
+            <p>The signed interaction index is the component of current flowing in the wind direction: <strong>current speed × cos(angle between wind and current)</strong>.</p>
+            <p>Negative values mean opposing wind and current, where waves may become shorter, steeper, choppier, and more confused. Positive values mean wind and current travel together; values near zero mean cross-flow or weak current.</p>
+            <p>This combines the selected SeaCast or CIOPS current source with the nearest 10 m HRDPS wind model sample at the displayed map time. It is a planning indicator, not a direct wave-height or sea-state forecast. Local bathymetry, shoreline effects, swell, and model resolution can materially change actual conditions.</p>
+          </div>
+        </details>
+
+        <details class="section-details">
+          <summary>Tides</summary>
+          <!-- 2026-08-06, later session (owner's request): new sub-tab,
+               originally left informational-only (tide stations ran
+               unconditionally, no toggle existed to relocate here -- see
+               CHANGELOG.md for that first round). Later the SAME session,
+               owner's explicit follow-up request: "Leave tide stations off
+               of map, until a button under tides is clicked. When button
+               is clicked, show all tide station locations." Now off by
+               default, same tideStationsEnabled guard/convention as
+               #wind-stations-toggle (loadTideStations() in app.js). Also
+               grew from 4 to 9 stations this same session -- see
+               data/tide_stations.js's own header comment for the five new
+               ones and how they were found (a real CHS region+time-series
+               API filter, not guessed). -->
+          <div class="field map-toggle-row">
+            <label class="checkbox-label"><input type="checkbox" id="tide-height-toggle"><span>Tide height</span></label>
+            <select id="tide-height-gradient" aria-label="Tide height colour scale">
+              <option value="classic">Classic (blue&ndash;lime&ndash;red)</option>
+              <option value="ocean">Ocean blues</option>
+              <option value="viridis">Viridis</option>
+              <option value="rainbow" selected>Rainbow (jet)</option>
+            </select>
+          </div>
+          <div class="field map-toggle-row">
+            <label class="checkbox-label"><input type="checkbox" id="tide-contours-toggle"><span>Tide-height contours</span></label>
+          </div>
+          <div class="field map-toggle-row">
+            <label class="checkbox-label"><input type="checkbox" id="tide-heatmap-toggle"><span>Tide-height heat map</span></label>
+            <select id="tide-heatmap-gradient" aria-label="Tide-height heat map colour scale">
+              <option value="classic">Classic (blue&ndash;lime&ndash;red)</option>
+              <option value="ocean">Ocean blues</option>
+              <option value="viridis">Viridis</option>
+              <option value="rainbow" selected>Rainbow (jet)</option>
+            </select>
+          </div>
+          <!-- 2026-08-06, later session (owner's request): the plain
+               always-visible disclaimer line moved behind this "?" button --
+               same showInfoPopup() modal pattern as Current Field's/Wind
+               Field's own "About" buttons just above in the Ocean tab
+               (NOT the small inline-toggle "?" pattern from the Weather
+               tab's first Marine-zones round, which the owner had deleted
+               outright later that same session -- this reuses the
+               currently-preferred pattern instead). -->
+          <div id="tide-stations-info" hidden>
+            Hover a station for its next tide, click for the tide-cycle
+            graph.
+          </div>
+        </details>
+      </details>
+
+      <!-- 2026-08-06: owner's request -- "Add a WEATHER tab", replicate
+           currentlybc.com's own zone-overlay idea using EC's real marine
+           forecast zones (data/marine_zones.js -- the 9 Pacific/Georgia
+           Basin zones), coloured by real scraped Warning/Watch/Advisory
+           status (data/marine_zone_status.js, fetch_marine_zone_status() in
+           fetch_model_data.py) with real EC zone boundary polygons
+           (data/marine_zone_shapes.js, fetch_marine_zone_shapes() -- see
+           that function's own header comment for a real open caveat: the
+           polygon fetch is unconfirmed on a live pipeline run as of this
+           writing). Off by default, same convention as every other map
+           overlay toggle (current heat map, wind arrows, wave heights).
+           Rendering itself (renderMarineZonesOnMap()) lives in app.js. -->
+      <details class="section-details" id="wind-weather-details">
+        <summary>Wind/Weather</summary>
+        <!-- 2026-08-06, later session (owner's request): renamed from
+             plain "Weather" now that the modeled "Wind arrows" field
+             toggle (moved here from the Map tab, was there since
+             2026-08-02) lives in this same section alongside the real EC
+             marine-zone/statement scrapes below -- name reflects both a
+             MODELED layer and real SCRAPED data now share this tab. -->
+        <!-- 2026-08-07, later session (owner's request): id added
+             (wind-weather-details) purely so app.js's
+             isMarineZoneSectionOpen() can tell whether this tab is even
+             expanded -- see item 1's own comment on the Environment Canada
+             <details> just below for the full feature. No visible/behavior
+             change from the id itself. -->
+
+        <!-- 2026-08-06, later session (owner's request): group the real
+             EC-sourced scrapes (Marine Synopsis statement text, Marine
+             Weather Warnings zone overlay) under one "Environment Canada"
+             subheading, separate from the modeled "Modelled winds" HRDPS
+             field -- same nested <details>/<summary> pattern already used
+             elsewhere (Ocean tab's Currents/Wave Height/Tides split,
+             Setup's Data Refresh/Area of Operations).
+             2026-08-07, later session (owner's request, three changes):
+             (1) ids added to this and its two children below
+             (environment-canada-details/marine-synopsis-details/
+             marine-weather-warnings-details) so app.js can tell which of
+             these are actually expanded right now -- see
+             isMarineZoneSectionOpen()'s own comment -- "Make EC weather
+             zone outlines visible when any EC tab is open": expanding any
+             one of these three now draws the zone boundary OUTLINES on the
+             map (renderMarineZonesOnMap(), grey, no status fill) even with
+             the "EC marine warning zones" checkbox below still off, so the
+             owner can see which zone is which while reading the
+             synopsis/warnings text, without committing to the full
+             red-warning overlay. (2) "Modelled winds" (was the first thing
+             in this tab, above Environment Canada) moved to BELOW this
+             whole block instead -- see its own relocated comment further
+             down. (3) unrelated to placement -- see the
+             "marine-zones-toggle" checkbox's own updated comment for the
+             new "on by default once any wind layer is on" behavior. -->
+        <div class="field" id="environment-canada-control">
+          <label class="checkbox-label" title="Show Environment Canada weather warnings on the map">
+            <input type="checkbox" id="environment-canada-toggle">
+            <span id="environment-canada-title-text"><strong>EC Weather warnings</strong></span>
+          </label>
+        </div>
+        <div class="field">
+          <label class="checkbox-label"><input type="checkbox" id="ec-marine-synopsis-toggle"><span><strong>EC Marine synopsis</strong></span></label>
+        </div>
+        <div id="environment-canada-content" hidden>
+          <div class="disclaimer" id="marine-weather-statement">Loading&hellip;</div>
+        </div>
+        <div class="field">
+          <label class="checkbox-label"><input type="checkbox" id="ec-hourly-forecast-toggle"><span><strong>Hourly weather forecast</strong></span></label>
+        </div>
+        <div id="ec-hourly-forecast-links" class="ec-hourly-forecast-links" hidden>
+          <a href="https://weather.gc.ca/en/forecast/hourly/index.html?coords=49.872,-124.546" target="_blank" rel="noopener">Powell River</a>
+          <a href="https://weather.gc.ca/en/location/index.html?coords=50.017,-125.242" target="_blank" rel="noopener">Campbell River</a>
+          <a href="https://weather.gc.ca/en/location/index.html?coords=49.166,-123.939" target="_blank" rel="noopener">Nanaimo</a>
+          <a href="https://weather.gc.ca/en/location/index.html?coords=48.860,-123.507" target="_blank" rel="noopener">Ganges</a>
+        </div>
+
+        <details class="section-details" id="environment-canada-details" hidden>
+          <!-- 2026-08-07, later session (owner's request): "The
+               'Environment Canada' title should turn red and flash if
+               there is a Warning in any of the zones." Text wrapped in its
+               own <span id="environment-canada-title-text"> so app.js's
+               updateEnvironmentCanadaWarningFlag() (see that function's own
+               comment) can toggle a class on just the text, not the whole
+               <summary> (which also has to keep its own default cursor/
+               list-marker styling from .section-details > summary --
+               narrower target, simpler override). Runs regardless of
+               whether this section/the zone checkbox below is currently
+               open/checked -- a real Warning should flash here even if the
+               owner has the map overlay itself toggled off. -->
+          <summary><span id="environment-canada-title-text-legacy">Environment Canada</span></summary>
+
+          <!-- 2026-08-06, later session (owner's request): real EC "Marine
+               Weather Statement" narrative text -- fetch_marine_weather_statement()
+               in fetch_model_data.py, data/marine_weather_statement.js,
+               renderMarineWeatherStatement() in app.js. Real text picked up
+               from the page, not just a link. Fixed single zone (owner's
+               own linked page, mapID=02/siteID=07010 -- "Juan de Fuca
+               Strait - central strait" under the South Coast region menu;
+               same real zone the 9-zone MARINE_ZONES loop below already
+               covers under the Georgia Basin region menu, mapID=03),
+               independent of the checkbox/zone-map feature below it. -->
+          <details class="section-details" id="marine-synopsis-details" open>
+            <summary>Marine Synopsis</summary>
+            <div class="disclaimer" id="marine-weather-statement-legacy">Loading&hellip;</div>
+          </details>
+
+          <!-- 2026-08-06, later session (owner's request: renamed from "EC
+               marine warning zones" to "Marine Weather Warnings", and the
+               "Official EC marine warnings (all zones)" link/disclaimer
+               (originally posted just under the "Modelled winds" toggle
+               above, prompted by a real live example -- a Strong Wind
+               Warning in effect for Howe Sound the modeled HRDPS wind
+               arrows didn't obviously flag, a coarse forecast grid can
+               genuinely miss a fjord/narrows' own localized in/outflow
+               pattern a human EC forecaster calls out by name) moved down
+               into this subsection alongside it. Links to EC's own live
+               region-wide zone map (Warning/Watch/Advisory color-coded,
+               every Pacific-Georgia-Basin zone at once, not just one
+               guessed zone) rather than trying to detect which single EC
+               zone the current map view or route falls in -- simpler, and
+               doesn't miss a warning in a neighbouring zone the owner
+               didn't think to check. Plain outbound link, no fetch/scrape
+               into this pipeline (yet) -- see BACKLOG.md if that's wanted
+               later. The checkbox/freshness-warning/status elements below
+               are unchanged (same ids, same app.js wiring), just
+               relocated + the row's label text updated. -->
+          <details class="section-details" id="marine-weather-warnings-details" open>
+            <!-- 2026-08-07, later session (owner's request, two changes):
+                 (1) "Move the red warning maps currently under 'EC marine
+                 warning zones' to Marine warnings" + "Move the button to
+                 turn off the Warning maps to the right of the Marine
+                 Weather Warnings title" -- the checkbox that drives the
+                 coloured Warning/Watch/Advisory zone overlay (id
+                 unchanged: marine-zones-toggle, same app.js wiring) moves
+                 from its own row below the disclaimer paragraph into this
+                 <summary> line itself, right-aligned opposite the title,
+                 and its label text shortens from "EC marine warning
+                 zones" to "Marine warnings" (redundant to keep saying
+                 "EC"/"warning zones" right next to a heading that already
+                 says "Marine Weather Warnings"). <summary> stays the
+                 <details> element's own direct child (same constraint
+                 noted on the Verification "?" button elsewhere in this
+                 file) -- just given its own flex layout
+                 (.marine-weather-warnings-summary in style.css) so the
+                 title and the checkbox can sit at opposite ends of one
+                 line. The WRAPPING .checkbox-label needs its own "click"
+                 listener calling stopPropagation() (app.js, alongside the
+                 checkbox's existing "change" listener) for the same reason
+                 verification-help-btn's own button does -- anything
+                 clicked inside <summary> also fires the browser's native
+                 toggle-the-<details> behavior unless the click event is
+                 stopped before it bubbles that far; preventDefault() is
+                 deliberately NOT called here (unlike that button) since
+                 this element's own default action -- actually flipping its
+                 checked state -- is exactly the behavior to keep. 2026-08-07
+                 follow-up bug fix: the listener originally lived on the
+                 <input> alone, which only stops a click landing exactly on
+                 the tiny checkbox box -- a click on the visible "Marine
+                 warnings" TEXT lands on the label/span instead and bubbles
+                 to <summary> independently, still collapsing this section
+                 ("Clicking 'Marine warnings' turns off red flashing
+                 Environment Canada title" -- see app.js's own updated
+                 comment for the full trace). Moved to the whole label so
+                 either click target is caught. -->
+            <summary class="marine-weather-warnings-summary">
+              <span>Marine Weather Forecasts and Warnings</span>
+              <label class="checkbox-label" title="Show the coloured Warning/Watch/Advisory zone overlay on the map"><input type="checkbox" id="marine-zones-toggle-legacy"><span>Marine warnings</span></label>
+            </summary>
+
+            <!-- 2026-08-07, same day, later session (owner's request):
+                 "Change and make 'Marine Weather Forecasts and Warnings' a
+                 collapsible subheading" + "Capture the EC Forecasts,
+                 extended forecasts and warnings and display them under this
+                 subheading." Title above renamed from "Marine Weather
+                 Warnings" (id/app.js wiring on this <details> and its
+                 checkbox unchanged -- only the visible <span> text and this
+                 comment). Forecast/Extended Forecast/active-warning-detail
+                 TEXT (as opposed to the existing red/watch/advisory STATUS
+                 overlay below, which stays as-is) is per-zone (9 zones, one
+                 EC page each -- see MARINE_ZONES in fetch_model_data.py),
+                 unlike the single fixed-zone Marine Synopsis above, so it
+                 needs its own zone picker rather than one fixed block --
+                 see the new #marine-forecast-zone-select and the three
+                 #marine-forecast-* text containers below, populated by
+                 renderMarineForecasts() in app.js from
+                 data/marine_forecasts.js (fetch_marine_forecasts() /
+                 build_marine_forecasts_js() in fetch_model_data.py). That
+                 scrape is UNVERIFIED against real raw HTML as of this edit
+                 (built from a markdown-rendered fetch, not the actual
+                 tag-stripped text the pipeline parses) -- flagged again on
+                 #marine-forecast-status below so the owner sees it in the UI
+                 too, not just in code comments, until a real "Refresh data"
+                 run confirms it one way or the other. Placed AFTER
+                 </summary> above -- <summary> must stay this <details>
+                 element's own first child (same constraint noted on the
+                 checkbox row's own comment just below) or the browser falls
+                 back to a default "Details" label instead of the real
+                 title. -->
+            <div class="field" style="margin:6px 0;">
+              <label class="checkbox-label"><input type="checkbox" id="marine-extended-map-toggle-legacy"><span>EC zone forecasts</span></label>
+            </div>
+
+            <!-- 2026-08-07, later session (owner's request): "on by
+                 default if any wind is on. User can turn it off." Turning
+                 on "Modelled winds" or "Buoys and shore stations" used to
+                 auto-check this box too (autoEnableMarineZonesIfWindOn() in
+                 app.js). REMOVED, later same day (owner's explicit
+                 reversal): "Do not turn Marine Warning on when I click
+                 'Modelled winds' or 'Buoy and shore stations'." This
+                 checkbox is now independent again -- only a direct click on
+                 it (or on "Refresh data") changes its state. Checkbox
+                 itself still relocated into the <summary> line above, same
+                 day, earlier session -- see this section's own opening
+                 comment. -->
+
+          </details>
+        </details>
+
+        <!-- 2026-08-07, later session (owner's request): "Move Modelled
+             winds to below Environment Canada" -- was the first control in
+             this tab (above Environment Canada); pure relocation, no
+             element id/behavior changed. -->
+        <!-- 2026-08-06, later session (owner's request: "change [ ] wind
+             arrows to [ ] Modelled winds (and source - is it GRIB2?)") --
+             renamed the checkbox label only, no element id/behavior
+             changed. Source confirmed in fetch_model_data.py: native ECCC
+             HRDPS (2.5km), fetched as raw GRIB2 files from MSC Datamart
+             and parsed with the bundled wgrib2.exe -- see that script's
+             own "2026-08-04: native ECCC HRDPS wind" section. Now stated
+             plainly in the About popup below, not just the label. -->
+        <div class="field map-toggle-row" style="margin-top:8px;">
+          <label class="checkbox-label"><input type="checkbox" id="wind-toggle"><span><strong>Modelled winds</strong></span></label>
+          <button type="button" class="graph-link" id="wind-field-about-btn">About</button>
+        </div>
+        <div id="wind-field-info" hidden></div>
+
+        <!-- 2026-08-06, later session (owner's request): shore/buoy wind
+             station markers (data/wind_stations.js, WIND_STATIONS in
+             fetch_model_data.py -- the same 12 real EC/MSC stations
+             windStationModelHtml() already compares real obs vs. HRDPS
+             model for) used to be always-on with no toggle at all. Now off
+             by default, same convention as every other map overlay
+             (current/wind arrows, marine zones) -- loadWindStations()'s
+             own windStationsEnabled guard in app.js. -->
+        <div class="field map-toggle-row" style="margin-top:8px;">
+          <label class="checkbox-label"><input type="checkbox" id="wind-stations-toggle"><span><strong>Buoys and shore stations</strong></span></label>
+        </div>
+
+      <!-- 2026-08-05: owner's request -- "Establish a database of shore/buoy
+           station winds and currents and make an XY plot of each parameter
+           ... vs the nearest Model point ... to show the 'calibration' of
+           the model values (for all times in the current model run)."
+           Wind and Current use two different reference sources (see the
+           disclaimer text below and showVerificationGraph()'s own comment
+           in app.js for why) -- no single "real current observation" source
+           exists in this pipeline yet, so Current falls back to CHS's own
+           predicted gate current curve as the closest available reference,
+           per the owner's own choice when this was scoped. -->
+      <details class="section-details" id="wind-comparison-details">
+        <!-- 2026-08-07, owner's request: "Remove the explanatory text to a
+             [ ? ]." Same small-circular-"?"-toggles-a-hidden-note pattern
+             already used twice elsewhere for the identical reason (cut
+             always-visible caption text down to opt-in) -- .leg-help-btn/
+             .leg-note (sidebar route legs) and .graph-modal-help-btn/
+             .graph-modal-note (graph popups). A THIRD dedicated CSS class
+             here (.verification-help-btn/.verification-note), not a share
+             of either -- matches this codebase's own explicit reasoning on
+             .leg-help-btn's comment for why those two aren't shared with
+             each other: unrelated parts of the app, not worth coupling
+             just to save a few lines of CSS. The "?" button lives INSIDE
+             <summary> (not a sibling wrapper div) -- <summary> must stay
+             the <details> element's own direct/first child or the browser
+             stops treating this section as a collapsible disclosure at
+             all; its click handler below calls stopPropagation() so
+             pressing "?" doesn't also toggle the section open/closed.
+             Plain hidden-attribute toggle (no redraw-surviving state
+             needed here, unlike legs' own legNoteOpenState -- this
+             section isn't rebuilt from scratch on every interaction the
+             way renderLegs() is). -->
+        <summary class="wind-comparison-summary"><label class="checkbox-label"><input type="checkbox" id="wind-comparison-toggle"><span>Compare measured and modelled winds</span></label> <button type="button" class="verification-help-btn" id="verification-help-btn" aria-label="About measured and modelled winds" title="About measured and modelled winds">?</button></summary>
+        <p class="disclaimer verification-note" id="verification-note" hidden>
+          XY scatter of reference (real-world) vs. modeled values -- a point
+          exactly on the dashed diagonal line means the model matched the
+          reference exactly at that time/station. <strong>Wind:</strong> real
+          shore/buoy station observations (weather.gc.ca) vs. the nearest
+          HRDPS model sample, accumulated across every "Refresh data" run
+          logged so far (data/wind_verification_log.js) -- more points build
+          up over time, this is not just the latest snapshot.
+        </p>
+        <input type="hidden" id="verification-param-select" value="wind">
+        <!-- 2026-08-07: was a single-select <select> (one station, or
+             "all"). Owner: "add off/on buttons for each of the stations, so
+             I can select the ones I want" -- replaced with a checkbox per
+             station so multiple specific stations can be selected at once.
+             Populated dynamically by populateVerificationStationOptions()
+             in app.js (rebuilt whenever Parameter changes, same as the old
+             <select>'s options were). "All stations" is now its own
+             checkbox (id="all") rather than a separate mutually-exclusive
+             option -- checking it checks/unchecks every station checkbox
+             (see the change listener wiring in app.js). -->
+        <div class="field verification-station-field">
+          <label>Stations</label>
+          <div id="verification-station-checkboxes" class="verification-station-checkboxes"></div>
+        </div>
+        <div class="field map-toggle-row">
+          <button type="button" class="graph-link" id="verification-show-btn">Show comparison graph</button>
+        </div>
+        <!-- 2026-08-06: owner found the Current verification graph reads as
+             an uncorrelated cloud (e.g. Active Pass r=0.40) where Wind's own
+             graph reads as a clean cloud around the diagonal (r=0.61+) --
+             root-caused to buildCurrentVerificationPoints()'s automatic
+             nearest-grid-point pick sometimes landing in a hydrodynamically
+             wrong spot in these narrow gates/passes (confirmed for real:
+             Dodd Narrows' nearest valid model cell reads ~0.06kn, essentially
+             slack water, a likely eddy/backwater cell next to the real
+             channel, not the channel itself -- Dodd Narrows itself runs up
+             to ~9kn). This row/status text (Current parameter + a specific
+             station only, see renderVerificationOverrideStatus() in app.js)
+             lets the owner override that pick by clicking a real grid point
+             on the map instead. -->
+        <div class="field map-toggle-row" id="verification-override-row" style="display:none;">
+          <button type="button" class="graph-link" id="verification-pick-btn">Pick verification point</button>
+          <button type="button" class="graph-link" id="verification-clear-override-btn" style="display:none;">Clear override</button>
+        </div>
+        <p class="disclaimer" id="verification-override-status" style="display:none;"></p>
+
+        <!-- 2026-08-07, owner's request: "Add comment box under
+             Verification, plus Edit/Save." Freeform notes field (e.g. "Dodd
+             Narrows current graph still reads noisy, revisit override" --
+             the owner's own working notes on what a verification run
+             showed), not tied to any one parameter/station/run -- just one
+             persisted note. readonly by default (matches every other
+             display-only field in this section); "Edit" lifts readonly and
+             reveals "Save", "Save" persists and puts it back to readonly --
+             same explicit two-step pattern as "Pick verification point" /
+             "Clear override" just above, not a live-autosave-on-every-
+             keystroke textarea. Persistence is localStorage only (same
+             VERIFICATION_OVERRIDES_KEY convention/try-catch-wrapped
+             read-write pattern in app.js, see
+             loadVerificationComment()/saveVerificationComment()) -- no
+             pipeline/helper-server involvement, this is the owner's own
+             browser-local scratch note, not fetched/regenerated data. -->
+        <div class="field verification-comment-field" style="margin-top:10px;">
+          <div class="leg-line">
+            <label for="verification-comment-textarea" style="margin-bottom:0;">Comments</label>
+            <div>
+              <button type="button" class="graph-link" id="verification-comment-edit-btn">Edit</button>
+              <button type="button" class="graph-link" id="verification-comment-save-btn" style="display:none;">Save</button>
+            </div>
+          </div>
+          <textarea id="verification-comment-textarea" class="verification-comment-textarea" rows="4" readonly placeholder="Notes on verification results&hellip;"></textarea>
+          <p class="disclaimer" id="verification-comment-status" style="display:none;"></p>
+        </div>
+      </details>
+      </details>
+
+      <!-- 2026-08-07, owner's request: "Move the PLANNING tab after/below
+           VERIFICATION." Whole section relocated from its old spot (right
+           after Setup, before Ocean) to last -- pure DOM move, no element
+           ids/app.js wiring changed by the move itself. Two content changes
+           landed in the SAME move, called out at their own spots below:
+           "Area of Operations" (moved in from Setup, as a new third
+           sub-tab) and "Route legs" (was a plain <h2>, now its own nested
+           <details> so it can collapse independently of Layout Route). -->
+      <details class="section-details">
+        <summary>Planning</summary>
+
+        <!-- 2026-08-07, owner's request: "Move Area of Operations to a
+             subtab under PLANNING." Was nested under Setup (alongside Data
+             Refresh) since the Setup/Planning/Ocean/Wind-Weather/
+             Verification split was first built -- moved here instead,
+             owner's own call on where it belongs conceptually. Pure DOM
+             relocation, same #aoi-info/#draw-aoi-btn/#clear-aoi-btn ids,
+             same app.js wiring (renderAoiInfo() et al.), unchanged.
+             Placed first among Planning's three sub-tabs (before Layout
+             Route/Query Route) -- defining the operating area is the
+             natural first step before laying out a route within it, not
+             an explicit owner ordering request. -->
+        <details class="section-details" id="area-of-operations-details" hidden>
+          <summary>Area of Operations</summary>
+          <!-- 2026-08-07, owner's request: "Add a note 'not yet fully
+               implemented' under Area of Operations." Plain disclaimer --
+               matches BACKLOG.md's own "Area of Operations" entry: this box
+               is display-only, not yet wired into the pipeline's own
+               BBOX/fetch density (drawing/clearing it here doesn't change
+               what the "Refresh data" pipeline actually fetches). -->
+          <p class="disclaimer" style="margin-top:0;">Not yet fully implemented — drawing or clearing an area here doesn't yet change what the data pipeline fetches.</p>
+          <div id="aoi-info"></div>
+          <div class="field">
+            <button id="draw-aoi-btn">Draw area on map</button>
+            <button id="clear-aoi-btn">Clear area</button>
+          </div>
+        </details>
+
+        <details class="section-details" id="layout-route-details">
+          <summary>Layout Route</summary>
+          <!-- 2026-08-05: owner's request -- label/input(/unit) tidied onto
+               one compact row each (was label-above-full-width-input, plus
+               wordier labels: "Default boat speed (knots)", "Departure
+               time (local)"). #departure is defaulted to the current local
+               date/time in app.js's DOMContentLoaded handler (was blank --
+               already treated as "now" internally for route timing either
+               way, see redraw()'s own cursorTime fallback, but now visibly
+               shows that instead of an empty field). -->
+          <div class="field field-inline">
+            <label for="speed">Boat speed</label>
+            <input type="number" id="speed" value="5" min="0.1" step="0.1">
+            <span class="field-unit">knots</span>
+          </div>
+
+          <div class="field field-inline">
+            <label for="departure">Departure time</label>
+            <input type="datetime-local" id="departure">
+          </div>
+
+          <!-- 2026-08-05: owner's request -- wind folded into the ETA/
+               ground-track correction (previously current-only). Wind
+               doesn't carry a boat at the full wind speed the way current
+               does -- this is a rough leeway approximation (a constant
+               percentage of wind speed, no point-of-sail/heel-angle
+               modeling, since this app has no sail-state input) -- default
+               3% is a starting estimate, not a measured figure for any
+               specific boat; adjust here if it doesn't match how your boat
+               actually behaves. 0% turns wind's contribution off entirely
+               (current-only correction, same as before this change). -->
+          <div class="field field-inline">
+            <label for="leeway-percent" title="Rough approximation: wind's contribution to drift, as a percentage of wind speed. No point-of-sail modeling -- tune to match your boat, or set to 0 to exclude wind entirely.">Leeway</label>
+            <input type="number" id="leeway-percent" value="3" min="0" max="100" step="0.5">
+            <span class="field-unit">% of wind speed</span>
+          </div>
+
+          <!-- 2026-08-05: owner's request -- replaces the removed "Undo
+               last point"/"Clear route" buttons with a one-line reminder
+               of the map gestures that do the same things (shift+click =
+               add, Backspace = undo last -- both unchanged in app.js,
+               only their button-triggered equivalents are gone; there is
+               no button/shortcut replacement for "Clear route" itself,
+               see README.md's changelog for that decision). -->
+          <p style="font-size:11px;color:#666;margin:0 0 10px;">Shift+click the map to add a waypoint, Backspace to delete the last one.</p>
+
+          <!-- 2026-08-07, owner's request: "Allow ROUTE LEGS (not all
+               capitals) to be collapsed separately from Layout Route." Was
+               a plain <h2>Route legs</h2> -- #sidebar h2's own CSS
+               (text-transform: uppercase) is exactly the "all capitals"
+               look the owner is asking to move away from here, and a plain
+               heading has no collapse state of its own at all (it only
+               ever showed/hid together with Layout Route, its parent
+               <details>). Now its own nested <details class="section-
+               details"> instead -- same pattern as Area of Operations
+               above (and Environment Canada/Marine Synopsis/Marine
+               Weather Warnings under Wind/Weather) -- picks up the
+               smaller, non-uppercase nested-summary style
+               (.section-details .section-details > summary in style.css)
+               automatically, and can now expand/collapse independently of
+               Layout Route's own fields above it. #legs itself (populated
+               by renderLegs() in app.js) is a pure DOM relocation -- same
+               id, same innerHTML target, unchanged. Left open by default
+               (matches every other nested section in this app; the owner
+               can collapse it once there are enough legs that hiding them
+               is actually useful). -->
+          <details class="section-details" open>
+            <summary>Route legs</summary>
+            <div id="legs"></div>
+          </details>
+        </details>
+
+        <details class="section-details" id="making-gate-details">
+          <summary>Making it to the Gate</summary>
+          <div class="field field-inline">
+            <label for="making-gate-select">Gate</label>
+            <select id="making-gate-select"><option value="">Select a gate</option></select>
+          </div>
+          <p style="font-size:11px;color:#666;margin:4px 0 8px;"><strong>Advisory only — not for navigation.</strong> Uses fresh live SOG when available, otherwise the Boat speed under Layout Route. Signal K or device GPS supplies position; Set vessel position on map remains the manual fallback.</p>
+          <button type="button" id="making-gate-position-btn">Click present position on map</button>
+          <div id="making-gate-status" style="font-size:11px;color:#555;margin-top:7px;">Advisory only — select a gate, then set your present position.</div>
+        </details>
+
+        <details class="section-details" id="query-route-details">
+          <summary>Query Route</summary>
+          <p style="font-size:12px;color:#666;margin-top:0;">
+            Conditions along the route you've laid out in Layout Route — the
+            next current/tide event at any gate or pass a leg passes within
+            ~1.5km of.
+          </p>
+          <div id="warnings">No route yet.</div>
+          <p style="font-size:11px;color:#666;margin:8px 0 0;">Backspace to delete a waypoint.</p>
+
+          <!-- 2026-08-05: owner's request, scoped via AskUserQuestion --
+               one popup graph, not on-map arrows/markers (owner's own
+               sketch was the starting point, but he settled on "a popup
+               graph" over drawing the sketch's dots/arrows on the map
+               itself). Same-day follow-up: raw map/forecast current, wind,
+               and wave conditions sampled hourly along the WHOLE route
+               (every leg, elapsed real forecast time as the x-axis) --
+               NOT the vessel's leeway-corrected effect (that's each leg's
+               own "?" note and the green ground-track arrows instead; an
+               earlier version of this graph showed that too, dropped per
+               the owner's explicit "not the effect on the vessel").
+               Waypoint markers + a live map-time line (moves as you step
+               the map's time-scrubber; the graph stays open and the map
+               underneath stays clickable while you do). Full scoping/
+               build trail in app/README.md's changelog. -->
+          <button type="button" id="route-graph-btn" class="graph-link" style="margin-top:8px;">Show route graph (current / wind / waves)</button>
+        </details>
+      </details>
+    </div>
+  </div>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="data/gate_stations.js"></script>
+  <script src="data/gate_predictions.js"></script>
+  <script src="data/tide_stations.js"></script>
+  <script src="data/tide_predictions.js"></script>
+  <script src="data/vancouver_island_outline.js"></script>
+  <script src="data/water_mask.js"></script>
+  <script src="data/gate_current_curve.js"></script>
+  <script src="data/wind_stations.js"></script>
+  <script src="data/wind_stations_obs.js?v=20260814-water-temp"></script>
+  <script src="data/wind_verification_log.js?v=20260814-historical-sst"></script>
+  <script src="data/current_field.js?v=20260810-browser-safe"></script>
+  <script src="data/wind_field.js"></script>
+  <script src="data/wave_field.js"></script>
+  <script src="data/landsat_sst.js?v=20260814-avhrr-scene4"></script>
+  <script src="data/landsat_sst_catalog.js?v=20260814-avhrr-scene4"></script>
+  <script src="data/marine_zones.js"></script>
+  <script src="data/marine_zone_status.js"></script>
+  <script src="data/marine_zone_shapes.js"></script>
+  <script src="data/marine_weather_statement.js"></script>
+  <script src="data/marine_forecasts.js"></script>
+  <script src="data/fishing_restrictions.js?v=2019-07-rca-clipped"></script>
+  <script src="data/protected_areas.js?v=20260812-bc-marine-parks"></script>
+  <script src="data/dfo_management_areas.js?v=20260812-clipped"></script>
+  <script src="vessel_logic.js?v=20260811"></script>
+  <script src="kids_access.js?v=20260814-first-mates-log"></script>
+  <script src="kids_windows.js?v=20260814-first-mates-log"></script>
+  <script src="kids_first_mates_log.js?v=20260814"></script>
+  <script src="kids_stories.js?v=20260814"></script>
+  <script src="kids_fish_game.js?v=20260812-streak-messages"></script>
+  <script src="kids_maze_game.js?v=20260812-difficulty-score"></script>
+  <script src="kids_puzzle_pack.js?v=20260812-passage-map-message"></script>
+  <script src="app.js?v=20260814-mark-location"></script>
+</body>
+</html>

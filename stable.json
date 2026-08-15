@@ -1,0 +1,36 @@
+﻿{
+    "version":  "2026.08.14-voyage-stories-1",
+    "notes":  "Cumulative voyage automation, daily local reports, illustrated Samuel Morrison story, and secure public update channel.",
+    "files":  [
+                  {
+                      "path":  "app.js",
+                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/main/releases/2026.08.14-voyage-stories-1/files/app.js",
+                      "sha256":  "06aa99f4288695140a92065bf566fc8a95500acf924244999520cc86e1984312",
+                      "size":  691736
+                  },
+                  {
+                      "path":  "index.html",
+                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/main/releases/2026.08.14-voyage-stories-1/files/index.html",
+                      "sha256":  "5e84b191ac189c15f5dfcc47f9662623f0f1c1d8afc6231b99a45734c214c435",
+                      "size":  105290
+                  },
+                  {
+                      "path":  "scripts/sailvu_helper_server.py",
+                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/main/releases/2026.08.14-voyage-stories-1/files/scripts/sailvu_helper_server.py",
+                      "sha256":  "ca78feefb242d8eb500818ca07b4739e48aa16c77d883ecb8e5c1ce1d2190116",
+                      "size":  25157
+                  },
+                  {
+                      "path":  "scripts/sailvu_updates.py",
+                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/main/releases/2026.08.14-voyage-stories-1/files/scripts/sailvu_updates.py",
+                      "sha256":  "80ee52e11bce083eed97269a95aef11569851582bb998e60f1aafc9dd6247e36",
+                      "size":  10171
+                  },
+                  {
+                      "path":  "assets/stories/Samuel_Morrison_Journey.pdf",
+                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/main/releases/2026.08.14-voyage-stories-1/files/assets/stories/Samuel_Morrison_Journey.pdf",
+                      "sha256":  "72b9ddd8167f35f2b3bb97d4f7d9531ea9a78441b5289a846bc37c15fda29026",
+                      "size":  2985842
+                  }
+              ]
+}
