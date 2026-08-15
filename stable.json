@@ -1,18 +1,24 @@
 ﻿{
-    "version":  "2026.08.15.1",
-    "notes":  "Adds visible SAILVu version numbers and coalesces rapid map-time clicks and slider events to prevent redundant redraws and interface bogging.",
+    "version":  "2026.08.15.2",
+    "notes":  "MARK LOCATION now captures a fresh boat position and time immediately, or shows a crosshair for a map pick when no live fix is available. A provisional crosshair appears before optional details are entered. Includes rapid map-time redraw protection.",
     "files":  [
                   {
                       "path":  "app.js",
-                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/c841a7c0104e31e7d8a20ff6840e1ce1f8f2a0da/releases/2026.08.15.1/files/app.js",
-                      "sha256":  "d9a69fe8cc1aa9f84f4a4a7fa718a2b8daf39cfc0cbbb29ca75405e78c83ed7a",
-                      "size":  692754
+                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/f26f2ebf17c0438d7631230dec8d41cebca07870/releases/2026.08.15.2/files/app.js",
+                      "sha256":  "faa8769007050813454b19a3b2447f7d0145f377deec48a4a2f847dea945663c",
+                      "size":  694425
                   },
                   {
                       "path":  "index.html",
-                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/c841a7c0104e31e7d8a20ff6840e1ce1f8f2a0da/releases/2026.08.15.1/files/index.html",
-                      "sha256":  "e5a92279297b9195c92c6b28d843734e05ac1c628987329cd61343ade58bbc90",
-                      "size":  105395
+                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/f26f2ebf17c0438d7631230dec8d41cebca07870/releases/2026.08.15.2/files/index.html",
+                      "sha256":  "e6eb2d241d25f61f6daf82a9f511b665f84d0dde2398ead2c8d2930a0094b554",
+                      "size":  105498
+                  },
+                  {
+                      "path":  "style.css",
+                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/f26f2ebf17c0438d7631230dec8d41cebca07870/releases/2026.08.15.2/files/style.css",
+                      "sha256":  "e8dc6fdbcdcad8f4aff579b4730712ba53437facdd19746fff3b528d55f24209",
+                      "size":  79234
                   }
               ]
 }
