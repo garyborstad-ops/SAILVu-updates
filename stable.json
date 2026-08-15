@@ -1,36 +1,18 @@
 ﻿{
-    "version":  "2026.08.14-voyage-stories-1",
-    "notes":  "Cumulative voyage automation, daily local reports, illustrated Samuel Morrison story, and secure public update channel.",
+    "version":  "2026.08.15.1",
+    "notes":  "Adds visible SAILVu version numbers and coalesces rapid map-time clicks and slider events to prevent redundant redraws and interface bogging.",
     "files":  [
                   {
                       "path":  "app.js",
-                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/dc7005074333352ec5afe7a8f8aaf71274a1f743/releases/2026.08.14-voyage-stories-1/files/app.js",
-                      "sha256":  "06aa99f4288695140a92065bf566fc8a95500acf924244999520cc86e1984312",
-                      "size":  691736
+                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/c841a7c0104e31e7d8a20ff6840e1ce1f8f2a0da/releases/2026.08.15.1/files/app.js",
+                      "sha256":  "d9a69fe8cc1aa9f84f4a4a7fa718a2b8daf39cfc0cbbb29ca75405e78c83ed7a",
+                      "size":  692754
                   },
                   {
                       "path":  "index.html",
-                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/dc7005074333352ec5afe7a8f8aaf71274a1f743/releases/2026.08.14-voyage-stories-1/files/index.html",
-                      "sha256":  "5e84b191ac189c15f5dfcc47f9662623f0f1c1d8afc6231b99a45734c214c435",
-                      "size":  105290
-                  },
-                  {
-                      "path":  "scripts/sailvu_helper_server.py",
-                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/dc7005074333352ec5afe7a8f8aaf71274a1f743/releases/2026.08.14-voyage-stories-1/files/scripts/sailvu_helper_server.py",
-                      "sha256":  "ca78feefb242d8eb500818ca07b4739e48aa16c77d883ecb8e5c1ce1d2190116",
-                      "size":  25157
-                  },
-                  {
-                      "path":  "scripts/sailvu_updates.py",
-                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/dc7005074333352ec5afe7a8f8aaf71274a1f743/releases/2026.08.14-voyage-stories-1/files/scripts/sailvu_updates.py",
-                      "sha256":  "f5036e2478d3ff74b898ad8a22a632fc0002e03f3283b48aa4eeab5b783ead75",
-                      "size":  10182
-                  },
-                  {
-                      "path":  "assets/stories/Samuel_Morrison_Journey.pdf",
-                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/dc7005074333352ec5afe7a8f8aaf71274a1f743/releases/2026.08.14-voyage-stories-1/files/assets/stories/Samuel_Morrison_Journey.pdf",
-                      "sha256":  "72b9ddd8167f35f2b3bb97d4f7d9531ea9a78441b5289a846bc37c15fda29026",
-                      "size":  2985842
+                      "url":  "https://raw.githubusercontent.com/garyborstad-ops/SAILVu-updates/c841a7c0104e31e7d8a20ff6840e1ce1f8f2a0da/releases/2026.08.15.1/files/index.html",
+                      "sha256":  "e5a92279297b9195c92c6b28d843734e05ac1c628987329cd61343ade58bbc90",
+                      "size":  105395
                   }
               ]
 }
